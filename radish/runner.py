@@ -12,6 +12,7 @@ from .scenarioloop import ScenarioLoop
 from .stepmodel import Step
 
 
+
 class Runner(object):
     """
         Represents a class which is able to run features.
@@ -74,9 +75,49 @@ class Runner(object):
             if not feature.has_to_run(world.config.scenarios):
                 continue
 
-            returncode |= self.run_feature(feature)
+            scenarios = self.collect_scenarios(feature)
+            # returncode |= self.run_feature(feature)
+
+        print("Collected {} scenarios".format(len(scenarios)))
+
+        procs = []
+        import multiprocessing
+        for i in range(3):
+            # client = MultiProcClientRunner(self, i)
+            p = multiprocessing.Process(target=self.run_scenario, args=(scenarios[i], ))
+            procs.append(p)
+            p.start()
+            del p
+
+
+        [p.join() for p in procs]
 
         return returncode
+
+    def collect_scenarios(self, feature):
+        """
+            Collects scenarios for the given feature
+
+            :param Feature feature: the feature to collect scenarios from
+        """
+        scenarios = []
+        if world.config.shuffle:
+            shuffle(feature.scenarios)
+
+        # returncode = 0
+        for scenario in feature:
+            if not scenario.has_to_run(world.config.scenarios):
+                continue
+            scenarios.append(scenario)
+            # returncode |= self.run_scenario(scenario)
+
+            if not isinstance(scenario, (ScenarioOutline, ScenarioLoop)):
+                continue
+
+            for sub_scenario in scenario.scenarios:
+                # returncode |= self.run_scenario(sub_scenario)
+                scenarios.append(sub_scenario)
+        return scenarios
 
     @handle_exit
     @call_hooks("each_feature")
@@ -104,7 +145,7 @@ class Runner(object):
 
     @handle_exit
     @call_hooks("each_scenario")
-    def run_scenario(self, scenario):
+    async def run_scenario(self, scenario):
         """
             Runs the given scenario
 
@@ -139,6 +180,7 @@ class Runner(object):
             state = step.debug()
         else:
             state = step.run()
+        yield
 
         return 1 if state == Step.State.FAILED else 0
 
